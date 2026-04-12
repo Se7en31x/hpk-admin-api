@@ -21,9 +21,9 @@ const writableFields = [
   "cid",
   "profession_id",
   "title_code",
-  "role",
-  "system",
-  "department",
+  "role_id",
+  "system_id",
+  "department_id",
 ];
 
 const allowedStatuses = ["Active", "Disabled", "Banned"];
@@ -52,15 +52,30 @@ function toNullableDate(value) {
   return parsed;
 }
 
-function normalizeStringArray(value, fieldName) {
+function toNullableInt(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+function normalizeIntArray(value, fieldName) {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
-    const err = new Error(`${fieldName} must be an array of strings`);
+    const err = new Error(`${fieldName} must be an array of integers`);
     err.statusCode = 400;
     throw err;
   }
 
-  const normalized = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  const normalized = [...new Set(value.map((item) => {
+    const n = parseInt(item, 10);
+    if (Number.isNaN(n)) {
+      const err = new Error(`${fieldName} contains an invalid integer: ${item}`);
+      err.statusCode = 400;
+      throw err;
+    }
+    return n;
+  }))];
 
   if (normalized.length > 50) {
     const err = new Error(`${fieldName} has too many items`);
@@ -103,18 +118,24 @@ function normalizeProfilePayload(payload) {
     }
   }
 
+  // Ensure all nullable integer scalar fields are properly typed
+  const intFields = [
+    "sex_id", "nationality", "race", "mstatus", "occupation",
+    "current_maininscl", "subdistrict_code", "district_code",
+    "province_code", "zip_code", "role_id",
+  ];
+  for (const field of intFields) {
+    if (data[field] !== undefined) {
+      data[field] = toNullableInt(data[field]);
+    }
+  }
+
   data.birth_date = toNullableDate(payload.birth_date);
-  data.system = normalizeStringArray(payload.system, "system");
-  data.department = normalizeStringArray(payload.department, "department");
+  data.system_id = normalizeIntArray(payload.system_id, "system_id");
+  data.department_id = normalizeIntArray(payload.department_id, "department_id");
   data.status_ = normalizeStatus(payload.status ?? payload.status_);
 
   validateCommonFields(data);
-
-  if (data.role != null && data.role !== "" && String(data.role).length > 50) {
-    const err = new Error("role is too long (max 50 chars)");
-    err.statusCode = 400;
-    throw err;
-  }
 
   return data;
 }
@@ -173,14 +194,14 @@ async function createProfile(payload) {
     throw err;
   }
 
-  if (!data.system || data.system.length === 0) {
-    const err = new Error("system is required");
+  if (!data.system_id || data.system_id.length === 0) {
+    const err = new Error("system_id is required");
     err.statusCode = 400;
     throw err;
   }
 
-  if (!data.department || data.department.length === 0) {
-    const err = new Error("department is required");
+  if (!data.department_id || data.department_id.length === 0) {
+    const err = new Error("department_id is required");
     err.statusCode = 400;
     throw err;
   }
@@ -201,14 +222,14 @@ async function updateProfile(id, payload) {
     throw err;
   }
 
-  if (data.system !== undefined && data.system.length === 0) {
-    const err = new Error("system must contain at least 1 item");
+  if (data.system_id !== undefined && data.system_id.length === 0) {
+    const err = new Error("system_id must contain at least 1 item");
     err.statusCode = 400;
     throw err;
   }
 
-  if (data.department !== undefined && data.department.length === 0) {
-    const err = new Error("department must contain at least 1 item");
+  if (data.department_id !== undefined && data.department_id.length === 0) {
+    const err = new Error("department_id must contain at least 1 item");
     err.statusCode = 400;
     throw err;
   }

@@ -20,46 +20,66 @@ async function getUserById(id) {
 }
 
 async function createUser(userData) {
-  const { 
-    email, password, firstname_th, lastname_th, role, status, system, department 
-    // ... ฟิลด์อื่นๆ
+  const {
+    email, password,
+    firstname_th, lastname_th, firstname_en, lastname_en,
+    cid, birth_date, title_code,
+    sex_id, mstatus, phone,
+    address_detail, subdistrict_code, district_code, province_code, zip_code,
+    profession_id, current_maininscl,
+    role_id, status,
+    system_id, department_id,
   } = userData;
 
   const userEmail = email.includes('@') ? email : `${email}@hpk.com`;
 
-  // สร้างใน Supabase Auth ด้วย password ที่ส่งมาจากหน้าบ้าน
+  const toInt = (v) => (v != null && v !== '' ? (parseInt(v, 10) || null) : null);
+  const toDate = (v) => (v ? new Date(v) : null);
+
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: userEmail,
-    password: password, // <-- ใช้ค่าที่แอดมินกรอกมา
+    password: password,
     email_confirm: true,
-    user_metadata: { role, systems: system || [] }
+    user_metadata: { role_id: toInt(role_id), system_id: Array.isArray(system_id) ? system_id : [] },
   });
 
   if (authError) throw authError;
 
   const userId = authData.user.id;
 
+  const profileData = {
+    firstname_th: firstname_th || null,
+    lastname_th: lastname_th || null,
+    firstname_en: firstname_en || null,
+    lastname_en: lastname_en || null,
+    cid: cid || null,
+    birth_date: toDate(birth_date),
+    title_code: title_code || null,
+    sex_id: toInt(sex_id),
+    mstatus: toInt(mstatus),
+    phone: phone || null,
+    address_detail: address_detail || null,
+    subdistrict_code: toInt(subdistrict_code),
+    district_code: toInt(district_code),
+    province_code: toInt(province_code),
+    zip_code: toInt(zip_code),
+    profession_id: profession_id || null,
+    current_maininscl: toInt(current_maininscl),
+    role_id: toInt(role_id),
+    status_: status || 'Active',
+    system_id: Array.isArray(system_id) ? system_id : [],
+    department_id: Array.isArray(department_id) ? department_id : [],
+  };
+
   try {
     // ใช้ upsert เพื่อรองรับทั้ง Trigger และการสร้างใหม่ (ป้องกัน Error Unique constraint)
     const profile = await prisma.profiles.upsert({
       where: { id: userId },
-      update: {
-        firstname_th, lastname_th, role,
-        status_: status || 'Active',
-        system: system || [],
-        department: department || [],
-        // ... ฟิลด์อื่นๆ ที่เหลือ
-      },
-      create: {
-        id: userId,
-        firstname_th, lastname_th, role,
-        status_: status || 'Active',
-        system: system || [],
-        department: department || [],
-      }
+      update: profileData,
+      create: { id: userId, ...profileData },
     });
 
-    return profile;
+    return { ...profile, temporaryPassword: password };
   } catch (dbError) {
     await supabaseAdmin.auth.admin.deleteUser(userId);
     throw dbError;
