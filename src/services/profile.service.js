@@ -141,7 +141,7 @@ function normalizeProfilePayload(payload) {
 }
 
 async function listProfiles() {
-  return prisma.profiles.findMany({
+  const profiles = await prisma.profiles.findMany({
     where: {
       deleted_at: null,
     },
@@ -157,10 +157,24 @@ async function listProfiles() {
       id: "asc",
     },
   });
+
+  const [departments, systems] = await Promise.all([
+    prisma.departments.findMany({ select: { id: true, name: true } }),
+    prisma.systems.findMany({ select: { id: true, name_th: true } }),
+  ]);
+
+  const deptMap = Object.fromEntries(departments.map((d) => [d.id, d.name]));
+  const sysMap = Object.fromEntries(systems.map((s) => [s.id, s.name_th]));
+
+  return profiles.map((p) => ({
+    ...p,
+    department: (p.department_id || []).map((id) => deptMap[id] || id),
+    system: (p.system_id || []).map((id) => sysMap[id] || id),
+  }));
 }
 
 async function getProfileById(id) {
-  return prisma.profiles.findFirst({
+  const profile = await prisma.profiles.findFirst({
     where: {
       id,
       deleted_at: null,
@@ -174,6 +188,28 @@ async function getProfileById(id) {
       },
     },
   });
+
+  if (!profile) return null;
+
+  const [departments, systems] = await Promise.all([
+    prisma.departments.findMany({
+      where: { id: { in: profile.department_id || [] } },
+      select: { id: true, name: true },
+    }),
+    prisma.systems.findMany({
+      where: { id: { in: profile.system_id || [] } },
+      select: { id: true, name_th: true },
+    }),
+  ]);
+
+  const deptMap = Object.fromEntries(departments.map((d) => [d.id, d.name]));
+  const sysMap = Object.fromEntries(systems.map((s) => [s.id, s.name_th]));
+
+  return {
+    ...profile,
+    department: (profile.department_id || []).map((id) => deptMap[id] || id),
+    system: (profile.system_id || []).map((id) => sysMap[id] || id),
+  };
 }
 
 async function createProfile(payload) {
